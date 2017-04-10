@@ -18,16 +18,25 @@ package uk.co.flax.luwak;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 
-import org.apache.lucene.index.*;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.memory.MemoryIndex;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.util.IOUtils;
+
+import uk.co.flax.luwak.directory.ByteBufferDirectory;
 
 /**
  * A collection of InputDocuments to be matched.
@@ -176,7 +185,7 @@ public abstract class DocumentBatch implements Closeable, Iterable<InputDocument
     // Implementation of DocumentBatch for collections of documents
     private static class MultiDocumentBatch extends DocumentBatch {
 
-        private final Directory directory = new RAMDirectory();
+        private final Directory directory = new ByteBufferDirectory();
         private LeafReader reader = null;
         private String[] docIds = null;
 
