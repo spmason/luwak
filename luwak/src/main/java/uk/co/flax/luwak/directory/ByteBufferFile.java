@@ -2,6 +2,9 @@ package uk.co.flax.luwak.directory;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Wraps a {@link ByteBuffer} to allow random access and dynamic growth / reallocation
@@ -10,12 +13,18 @@ public class ByteBufferFile implements Cloneable {
     private static final int BUFFER_SIZE = 1024;
 
     private ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE);
-    private AtomicLong length = new AtomicLong();
+    private final AtomicLong length = new AtomicLong();
+    private final Lock positionReadLock;
+    private final Lock positionWriteLock;
 
     public ByteBufferFile() {
+        ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+        positionReadLock = readWriteLock.readLock();
+        positionWriteLock = readWriteLock.writeLock();
     }
 
     private ByteBufferFile(byte[] bytes) {
+        this();
         buffer = ByteBuffer.wrap(bytes);
         length.set(bytes.length);
     }
@@ -52,23 +61,19 @@ public class ByteBufferFile implements Cloneable {
     }
 
     public void read(int position, byte[] b, int offset, int len) {
-        buffer.position(position);
-        buffer.get(b, offset, len);
+        lockPosition(position, () -> buffer.get(b, offset, len));
     }
 
     public ByteBufferFile slice(int offset, int length) {
-        int oldPosition = buffer.position();
         byte[] bytes = new byte[length];
-        buffer.position(offset);
-        buffer.get(bytes, 0, length);
-        buffer.position(oldPosition);
+        lockPosition(offset, () -> buffer.get(bytes, 0, length));
 
         return new ByteBufferFile(bytes);
     }
 
     public void writeByte(int position, byte b) {
         if (position == buffer.capacity()) {
-            increaseBufferSize();
+            increaseBufferSize(position, 1);
         }
         buffer.put(position, b);
         if (this.length.get() < position + 1) {
@@ -77,32 +82,53 @@ public class ByteBufferFile implements Cloneable {
     }
 
     public void write(int position, byte[] b, int offset, int length) {
-        if (buffer.capacity() < buffer.position() + length) {
-            increaseBufferSize();
+        if (buffer.capacity() < position + length) {
+            increaseBufferSize(position, length);
         }
-        buffer.position(position);
-        buffer.put(b, offset, length);
-        this.length.set(buffer.position());
+        lockPosition(position, () -> buffer.put(b, offset, length));
+        this.length.set(position + length);
     }
 
-    private synchronized void increaseBufferSize() {
-        ByteBuffer newBuffer = ByteBuffer.allocate(buffer.capacity() + BUFFER_SIZE);
+    private void lockPosition(int position, Runnable then) {
+        if (buffer.position() == position) {
+            // Acquire lock then check again
+            positionReadLock.lock();
+
+            if (buffer.position() != position) {
+                // something else changed the position - release our lock & try again
+                positionReadLock.unlock();
+                lockPosition(position, then);
+                return;
+            }
+            try {
+                then.run();
+            } finally {
+                positionReadLock.unlock();
+            }
+        } else {
+            positionWriteLock.lock();
+            try {
+                buffer.position(position);
+                then.run();
+            } finally {
+                positionWriteLock.unlock();
+            }
+        }
+    }
+
+    private void increaseBufferSize(int position, int desiredLengthIncrease) {
+        int newLength = position + desiredLengthIncrease;
+        int newCapacity = buffer.capacity();
+
+        while (newCapacity < newLength) {
+            newCapacity += BUFFER_SIZE;
+        }
+
+        ByteBuffer newBuffer = ByteBuffer.allocate(newCapacity);
 
         buffer.position(0);
         newBuffer.put(buffer);
 
         buffer = newBuffer;
-    }
-
-    public void resetPosition() {
-        this.buffer.position(0);
-    }
-
-    public long getPosition() {
-        return this.buffer.position();
-    }
-
-    public void setPosition(int pos) {
-        this.buffer.position(pos);
     }
 }

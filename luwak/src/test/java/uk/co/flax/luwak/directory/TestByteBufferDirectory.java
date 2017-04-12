@@ -73,7 +73,7 @@ public class TestByteBufferDirectory {
 
     @Test
     public void testGrowingSize() throws IOException {
-        final byte[] BYTES = new byte[] { 1, 2, 3, 4};
+        final byte[] BYTES = new byte[] { 1, 2, 3, 4 };
         final int ITERATIONS = 512;
 
         ByteBufferDirectory directory = new ByteBufferDirectory();
@@ -94,6 +94,27 @@ public class TestByteBufferDirectory {
                 assertThat(b).isEqualTo(BYTES);
                 assertThat(input.getFilePointer()).isEqualTo(BYTES.length * (i + 1));
             }
+        }
+    }
+
+    @Test
+    public void testGrowingSize_moreThanBuffer() throws IOException {
+        final byte[] BYTES = new byte[2049];
+
+        ByteBufferDirectory directory = new ByteBufferDirectory();
+
+        try (IndexOutput output = directory.createOutput("test", new IOContext())) {
+            output.writeBytes(BYTES, BYTES.length);
+            assertThat(output.getFilePointer()).isEqualTo(BYTES.length);
+        }
+        assertThat(directory.fileLength("test")).isEqualTo(2049);
+
+        try (IndexInput input = directory.openInput("test", new IOContext())) {
+            byte[] b = new byte[BYTES.length];
+            input.readBytes(b, 0, BYTES.length);
+
+            assertThat(b).isEqualTo(BYTES);
+            assertThat(input.getFilePointer()).isEqualTo(2049);
         }
     }
 

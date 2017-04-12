@@ -142,7 +142,6 @@ public class ByteBufferDirectory extends BaseDirectory {
         if (file == null) {
             throw new FileNotFoundException(name);
         }
-        file.resetPosition();
         return new ByteBufferInputStream(name, file);
     }
 
