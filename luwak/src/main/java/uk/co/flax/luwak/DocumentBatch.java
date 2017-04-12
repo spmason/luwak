@@ -18,15 +18,25 @@ package uk.co.flax.luwak;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.*;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 
-import org.apache.lucene.index.*;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.memory.MemoryIndex;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.RAMDirectory;
+import org.apache.lucene.store.MMapDirectory;
 import org.apache.lucene.util.IOUtils;
 
 /**
@@ -176,13 +186,22 @@ public abstract class DocumentBatch implements Closeable, Iterable<InputDocument
     // Implementation of DocumentBatch for collections of documents
     private static class MultiDocumentBatch extends DocumentBatch {
 
-        private final Directory directory = new RAMDirectory();
+        private final Directory directory;
         private LeafReader reader = null;
         private String[] docIds = null;
 
         MultiDocumentBatch(List<InputDocument> docs, Similarity similarity) {
             super(docs, similarity);
             assert docs.size() > 1;
+
+            try {
+                MMapDirectory mmapDirectory = new MMapDirectory(Files.createTempDirectory("luwak"));
+                mmapDirectory.setPreload(true);
+                directory = mmapDirectory;
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+
             IndexWriterConfig iwc = new IndexWriterConfig(docs.get(0).getAnalyzers()).setSimilarity(similarity);
             try (IndexWriter writer = new IndexWriter(directory, iwc)) {
                 this.reader = build(writer);
