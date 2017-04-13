@@ -12,7 +12,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class ByteBufferFile implements Cloneable {
     private static final int BUFFER_SIZE = 1024;
 
-    private ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE);
+    private ByteBuffer buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
     private final AtomicLong length = new AtomicLong();
     private final Lock positionReadLock;
     private final Lock positionWriteLock;
@@ -124,7 +124,7 @@ public class ByteBufferFile implements Cloneable {
             newCapacity += BUFFER_SIZE;
         }
 
-        ByteBuffer newBuffer = ByteBuffer.allocate(newCapacity);
+        ByteBuffer newBuffer = ByteBuffer.allocateDirect(newCapacity);
 
         buffer.position(0);
         newBuffer.put(buffer);
